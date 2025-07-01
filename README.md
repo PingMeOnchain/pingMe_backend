@@ -27,5 +27,34 @@
 - **Serde** — For serialization
 - **dotenv** — Environment configuration
 
+## ⚙️ Environment Configuration
+
+1. Copy `.env.example` to `.env` and fill in your secrets:
+   ```sh
+   cp .env.example .env
+   # Edit .env to add your API keys and database URL
+   ```
+2. The application will load and validate required environment variables at startup. If any are missing, it will exit with an error message.
+
 ## 🛠️ Getting Started
+
+1. Clone the repository:
+   ```sh
+   git clone https://github.com/yourusername/pingme.git
+   cd pingme
+   ```
+2. Install Rust and Cargo if you haven't already.
+3. Build the project:
+   ```sh
+   cargo build --release
+   ```
+4. Run the application:
+   ```sh
+   cargo run
+   ```
+5. Send a test notification:
+   ```sh
+   curl -X POST http://localhost:3000/notify -H "Content-Type: application/json" -d '{"message": "Hello, world!"}'
+   ```
+6. Check your email, Telegram, or webhook receiver for the notification.
 
