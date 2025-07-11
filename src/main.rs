@@ -1,23 +1,16 @@
+mod config;
+use config::Config;
 
-use axum::{routing::{post, get}, Router, Json, extract::Path, http::StatusCode};
-use axum::extract::State;
-use sqlx::Row;
-use std::sync::Arc;
-
-// Use explicit type annotation for the handler state
-type AppState = Arc<SqlitePool>;
-
-fn app(pool: AppState) -> Router {
-    Router::new()
-        .route("/subscribe/:user_id", post(subscribe))
-        .route("/unsubscribe/:user_id/:event", post(unsubscribe))
-        .route("/preferences/:user_id/:event", get(get_preferences).post(update_preferences))
-        .with_state(pool)
-}
+use axum::{
+    routing::{post, get},
+    Router, Json, extract::Path, http::StatusCode, extract::State
+};
 use serde::{Deserialize, Serialize};
-use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
-use std::net::SocketAddr;
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions, Row};
+use std::{net::SocketAddr, sync::Arc};
 use thiserror::Error;
+
+type AppState = Arc<SqlitePool>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Channel {
@@ -69,16 +62,23 @@ impl axum::response::IntoResponse for ApiError {
     }
 }
 
+fn app(pool: AppState) -> Router {
+    Router::new()
+        .route("/subscribe/:user_id", post(subscribe))
+        .route("/unsubscribe/:user_id/:event", post(unsubscribe))
+        .route("/preferences/:user_id/:event", get(get_preferences).post(update_preferences))
+        .with_state(pool)
+}
+
 #[axum::debug_handler]
 async fn subscribe(
     Path(user_id): Path<String>,
     State(pool): State<Arc<SqlitePool>>,
     Json(req): Json<SubscriptionRequest>,
 ) -> Result<Json<Subscription>, ApiError> {
-    // Insert or update subscription in DB
     let preferences_json = serde_json::to_string(&req.preferences).unwrap();
     sqlx::query(
-        "INSERT INTO subscriptions (user_id, event, preferences) VALUES (?, ?, ?) \
+        "INSERT INTO subscriptions (user_id, event, preferences) VALUES (?, ?, ?)
         ON CONFLICT(user_id, event) DO UPDATE SET preferences=excluded.preferences"
     )
     .bind(&user_id)
@@ -123,8 +123,10 @@ async fn get_preferences(
     .fetch_one(pool.as_ref())
     .await
     .map_err(|_| ApiError::InvalidRequest("Subscription not found".into()))?;
+
     let preferences: Vec<NotificationPreference> = serde_json::from_str(rec.try_get::<&str, _>("preferences").unwrap())
         .map_err(|_| ApiError::InvalidRequest("Invalid preferences format".into()))?;
+
     Ok(Json(Subscription {
         user_id,
         event,
@@ -174,6 +176,18 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), ApiError> {
+    // Load environment variables
+    match Config::from_env() {
+        Ok(cfg) => {
+            println!("Configuration loaded successfully: {:?}", cfg);
+            // You can use cfg fields here if needed (e.g., database URL)
+        }
+        Err(e) => {
+            eprintln!("Configuration error: {}", e);
+            std::process::exit(1);
+        }
+    }
+
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect("sqlite://pingme.db").await?;
